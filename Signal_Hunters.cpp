@@ -8,8 +8,8 @@
 using namespace std;
 
 
-thread_local int tl_worker_id = -1;
-thread_local WorkerStatus* tl_worker_status = nullptr;
+thread_local int local_worker_id = -1;
+thread_local WorkerStatus* local_worker_status = nullptr;
 
 
 const char* classification_name(int classification) {
@@ -34,13 +34,15 @@ void parse_segment(const string& line, Segment& segment) {
     segment.detection_threshold = strtol(p, &end, 10);
     p = end;
 
-    while (true) {
+    bool more_samples = true;
+    while (more_samples) {
         int value = strtol(p, &end, 10);
         if (end == p) {
-            break;
+            more_samples = false;
+        } else {
+            segment.signals.push_back(value);
+            p = end;
         }
-        segment.signals.push_back(value);
-        p = end;
     }
 
     segment.numner_of_signals = segment.signals.size();
@@ -67,8 +69,12 @@ void analyze_segment(Segment& segment) {
         if (value > segment.detection_threshold) {
             ++segment.number_of_signal_above_detection_threshold;
             ++current_run;
-            if (current_run > segment.longest_consecutive_run_above_detection_threshold) {
-                segment.longest_consecutive_run_above_detection_threshold = current_run;
+            if (
+                current_run 
+                > segment.longest_consecutive_run_above_detection_threshold
+            ) {
+                segment.longest_consecutive_run_above_detection_threshold
+                 = current_run;
             }
         }
         else {
@@ -97,11 +103,13 @@ void print_segment_results(Segment segment, ostream& pout) {
          << " samples=" << segment.numner_of_signals
          << " min=" << segment.min_signal_strength
          << " max=" << segment.max_signal_strength
-         << " avg=" << fixed << setprecision(2) << segment.average_signal_strength
+         << " avg=" 
+         << fixed << setprecision(2) << segment.average_signal_strength
          << " above=" << segment.number_of_signal_above_detection_threshold
-         << " longest=" << segment.longest_consecutive_run_above_detection_threshold
+         << " longest=" 
+         << segment.longest_consecutive_run_above_detection_threshold
          << ' ' << classification_name(segment.classification)
-         << " worker=" << tl_worker_id;
+         << " worker=" << local_worker_id;
 }
 
 
@@ -158,12 +166,12 @@ const WorkerStatus& ThreadPool::status(int worker) const {
 }
 
 WorkerStatus* ThreadPool::current_worker_status() {
-    return tl_worker_status;
+    return local_worker_status;
 }
 
 void ThreadPool::worker_loop(int worker_id) {
-    tl_worker_id = worker_id;
-    tl_worker_status = &statuses[worker_id];
+    local_worker_id = worker_id;
+    local_worker_status = &statuses[worker_id];
 
     while (true) {
         Job job;
@@ -179,15 +187,16 @@ void ThreadPool::worker_loop(int worker_id) {
             job_queue.pop();
         }
 
-        tl_worker_status->is_busy.store(true);
+        local_worker_status->is_busy.store(true);
         job();
-        tl_worker_status->is_busy.store(false);
+        local_worker_status->is_busy.store(false);
         jobs_pending.fetch_sub(1);
     }
 }
 
 
-Monitor::Monitor(const ThreadPool& pool, ostream& pout) : pool(pool), pout(pout) {
+Monitor::Monitor(
+    const ThreadPool& pool, ostream& pout) : pool(pool), pout(pout) {
 }
 
 Monitor::~Monitor() {
@@ -265,5 +274,26 @@ void print_summary(const ThreadPool& pool, double elapsed_seconds, ostream& pout
         << "Samples examined:   " << samples << '\n'
         << "Signals detected:   " << signals << '\n'
         << "Worker threads:     " << pool.size() << '\n'
-        << "Elapsed time:       " << fixed << setprecision(3) << elapsed_seconds << " seconds\n";
+        << "Elapsed time:       " 
+        << fixed << setprecision(3) << elapsed_seconds << " seconds\n";
+}
+
+AnalyzeJob::AnalyzeJob(
+    Segment* segment, vector<string>* results, mutex* results_mutex)
+    : segment(segment), results(results), results_mutex(results_mutex) {
+}
+
+void AnalyzeJob::operator()() {
+    analyze_segment(*segment);
+
+    WorkerStatus* status = ThreadPool::current_worker_status();
+    status->segments_processed.fetch_add(1);
+    status->samples_examined.fetch_add(segment->numner_of_signals);
+    if (segment->classification != 0) {
+        status->signals_detected.fetch_add(1);
+    }
+
+    string result = format_segment_result(*segment);
+    lock_guard<mutex> lock(*results_mutex);
+    results->push_back(result);
 }

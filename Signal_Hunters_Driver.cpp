@@ -10,35 +10,6 @@
 
 using namespace std;
 
-// One job: analyze a single segment, update this worker's counters, store the result.
-struct AnalyzeJob {
-    Segment* segment;
-    vector<string>* results;
-    mutex* results_mutex;
-
-    AnalyzeJob(Segment* segment, vector<string>* results, mutex* results_mutex)
-        : segment(segment), results(results), results_mutex(results_mutex) {
-    }
-
-    void operator()() {
-        analyze_segment(*segment);
-
-        WorkerStatus* status = ThreadPool::current_worker_status();
-        status->segments_processed.fetch_add(1);
-        status->samples_examined.fetch_add(segment->numner_of_signals);
-        if (segment->classification != 0) {
-            status->signals_detected.fetch_add(1);
-        }
-
-        string result = format_segment_result(*segment);
-        lock_guard<mutex> lock(*results_mutex);
-        results->push_back(result);
-    }
-};
-
-
-
-
 int main(int, char *argv[]) {//example call ./signalHunter signals.txt 4
 
     string filename = argv[1];
@@ -62,7 +33,6 @@ int main(int, char *argv[]) {//example call ./signalHunter signals.txt 4
     }
 
     vector<string> results;
-    results.reserve(lines.size());
     mutex results_mutex;
 
     chrono::steady_clock::time_point start = chrono::steady_clock::now();
@@ -72,7 +42,8 @@ int main(int, char *argv[]) {//example call ./signalHunter signals.txt 4
     monitor.start();
 
     for (size_t i = 0; i < segments.size(); ++i) {
-        pool.submit(AnalyzeJob(&segments[i], &results, &results_mutex));
+        AnalyzeJob job(&segments[i], &results, &results_mutex);
+        pool.submit(job);
     }
 
     pool.shutdown();

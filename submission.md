@@ -42,16 +42,16 @@ Each segment is one job on a single shared queue. Idle workers take the next job
 
 | Variable | Why thread-local |
 |---|---|
-| `tl_worker_id` | The worker's own index, used to tag each result with `worker=N`. |
-| `tl_worker_status` | Pointer to this worker's `WorkerStatus`, so a job can update its worker's stats without a lookup or lock. |
+| `local_worker_id` | The worker's own index, used to tag each result with `worker=N`. |
+| `local_worker_status` | Pointer to this worker's `WorkerStatus`, so a job can update its worker's stats without a lookup or lock. |
 
 ## Sleeping When No Work Is Available
 
-Workers block on `job_available.wait()` until the queue is non-empty or `stopping` is set. No CPU is used while waiting. `submit()` pushes under the mutex and calls `notify_one()`.
+Workers block on `job_available.wait()` until the queue is not empty or `stopping` is set. `submit()` pushes under the mutex and calls `notify_one()`.
 
 ## Termination
 
-`shutdown()` sets `stopping = true` under the mutex and calls `notify_all()`. Workers drain any remaining jobs, and each exits when the queue is empty and `stopping` is set. `shutdown()` joins all workers. The monitor is stopped through its own condition variable and joined.
+`shutdown()` sets `stopping = true` under the mutex and calls `notify_all()`. Workers drain any remaining jobs, and each exits when the queue is empty and `stopping` is set. `shutdown()` joins all workers. The monitor is stopped through its own codition variable and joined.
 
 ## Classification
 
@@ -83,7 +83,7 @@ Input: `signals.txt` (500 segments, 4,165,467 samples). Output was identical for
 | 512     | 0.008 s      |
 | 1024    | 0.016 s      |
 
-Time drops from 1 to 2 workers, then flattens through 16. It gets worse from 32 workers on, doubling at each step from 128 to 1024. The analysis is only a few milliseconds, so thread startup is a large share of it. With 10 cores, extra threads cannot run in parallel and only add creation.
+Time drops from 1 to 2 workers, then flattens through 16. It gets worse from 32 workers on, doubling at each step from 128 to 1024.
 
 ### Linux server results (earth.ecs.baylor.edu)
 
