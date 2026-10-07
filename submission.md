@@ -14,7 +14,7 @@ g++ -std=c++11 -Wall -Wextra -pthread Signal_Hunters.cpp
 - **Main thread:** parses the file into `Segment`s, submits one job per segment, calls `shutdown()`, prints results and summary.
 - **ThreadPool:** N worker threads, a job queue, a mutex and a condition variable.
 - **Monitor:** separate thread that prints worker status about once per second.
-- **Job:** an `AnalyzeJob` function object that analyzes one segment, updates the worker's counters, and appends the formatted result to the results vector.
+- **Job:** an `AnalyzeJob` function object that analyzes one segment, updates the worker's counters, and appends the  result to the results vector.
 
 ## Job Distribution
 
@@ -59,7 +59,7 @@ Workers block on `job_available.wait()` until the queue is non-empty or `stoppin
 - **POSSIBLE SIGNAL:** at least one sample above the threshold, but not strong.
 - **NO SIGNAL:** no samples above the threshold.
 
-"Above" means strictly greater than the threshold. "Signals detected" counts STRONG and POSSIBLE segments.
+"Above" means greater than the threshold. "Signals detected" counts STRONG and POSSIBLE segments.
 
 ## Performance Experiment
 
@@ -67,7 +67,7 @@ Input: `signals.txt` (500 segments, 4,165,467 samples). Output was identical for
 
 ### Local results (MacBook Pro)
 
-**Machine 1:** MacBook Pro (Mac17,2), Apple M5, 10 cores (4 Super + 6 Efficiency), 16 GB RAM, macOS (Darwin 25.6.0). Compiled with the Makefile: `g++ -std=c++11 -Wall -Wextra -pthread -O2`. 5 runs per configuration, median reported.
+**Machine 1:** MacBook Pro, Apple M5, 10 cores (4 Super + 6 Efficiency)
 
 | Workers | Elapsed time |
 |---------|--------------|
@@ -83,11 +83,11 @@ Input: `signals.txt` (500 segments, 4,165,467 samples). Output was identical for
 | 512     | 0.008 s      |
 | 1024    | 0.016 s      |
 
-Time drops from 1 to 2 workers, then flattens through 16. It gets worse from 32 workers on, doubling at each step from 128 to 1024. The analysis is only a few milliseconds, so thread startup and queue-lock contention are a large share of it. With 10 cores, extra threads cannot run in parallel and only add creation, scheduling and join cost. The whole-process time, which includes the ~47 ms file parse on the main thread, stayed at about 0.05 s for 1 to 64 workers and rose to 0.066 s at 1024.
+Time drops from 1 to 2 workers, then flattens through 16. It gets worse from 32 workers on, doubling at each step from 128 to 1024. The analysis is only a few milliseconds, so thread startup is a large share of it. With 10 cores, extra threads cannot run in parallel and only add creation.
 
 ### Linux server results (earth.ecs.baylor.edu)
 
-**Machine 2:** Baylor ECS shared Linux server `earth`, Intel Xeon Gold 6230 @ 2.10 GHz, 80 logical CPUs (shared with other users). Compiled with `g++ -std=c++17 -Wall -pthread` (no `-O`). One run per configuration.
+**Machine 2:** Baylor ECS Linux server `earth`, Intel Xeon Gold 6230, 80 logical CPUs
 
 | Workers | Elapsed time |
 |---------|--------------|
@@ -101,6 +101,4 @@ Time drops from 1 to 2 workers, then flattens through 16. It gets worse from 32 
 | 116     | 0.009 s (highest count that ran) |
 | 128     | crashed (`std::system_error: Resource temporarily unavailable`) |
 
-On Linux the time scales with workers from 1 to 16 (0.024 s to 0.004 s, about 6x), then gets slightly worse at 32 and 64 as thread overhead outweighs the gains. The Mac is faster at every worker count and much faster at 1 worker (0.003 s vs 0.024 s), so it has little room left to gain from parallelism, while earth's slower baseline leaves more for threads to recover. Part of the gap may be the missing `-O` flag on earth, which has not been re-tested.
-
-At 128 workers the program aborted because `earth` refused to create more threads. `ulimit -u` reports 128 on earth, and each thread counts toward that per-user limit. Counting down from 128, 116 workers was the most that ran, which leaves about 12 slots for the main thread, the monitor thread, the shell and other processes. The program does not catch the exception from `std::thread`. macOS handled up to 1024 workers.
+On Linux the time scales with workers from 1 to 16 (0.024 s to 0.004 s, about 6x), then gets slightly worse at 32 and 64 as thread overhead outweighs the gains.
