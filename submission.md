@@ -63,28 +63,31 @@ Workers block on `job_available.wait()` until the queue is non-empty or `stoppin
 
 ## Performance Experiment
 
-Input: `signals.txt` (500 segments, 4,165,467 samples). 5 runs per configuration. Output was identical every run (345 signals detected). 
-**Machine 1 (local):** MacBook Pro (Mac17,2), Apple M5, 10 cores (4 Super + 6 Efficiency).
+Input: `signals.txt` (500 segments, 4,165,467 samples). Output was identical for every run on both machines: 500 segments, 4,165,467 samples, 345 signals detected. The reported time is the "Elapsed time" printed by the program, which covers creating the pool through `shutdown()` and excludes file parsing.
 
-| Workers | Analysis time (median reported) | Total program time (avg) |
-|---------|---------------------------------|--------------------------|
-| 1       | 0.003 s                         | 0.052 s                  |
-| 2       | 0.001 s                         | 0.051 s                  |
-| 4       | 0.001 s                         | 0.050 s                  |
-| 8       | 0.001 s                         | 0.050 s                  |
-| 16      | 0.001 s                         | 0.049 s                  |
-| 32      | 0.002 s                         | 0.050 s                  |
-| 64      | 0.002 s                         | 0.050 s                  |
-| 128     | 0.003 s                         | 0.054 s                  |
-| 256     | 0.004 s                         | 0.053 s                  |
-| 512     | 0.008 s                         | 0.057 s                  |
-| 1024    | 0.016 s                         | 0.066 s                  |
+### Local results (MacBook Pro)
 
-Analysis time drops from 1 to 2 workers, then flattens from 2 to 16 workers. It gets worse from 32 workers on, doubling at each step from 128 to 1024. The analysis takes only a few milliseconds, so thread startup and queue-lock contention are a large share of it. With only 10 CPUs, extra threads beyond that cannot run in parallel. They only add creation, scheduling and join cost, which grows with the thread count. File parsing (~50 ms) runs on the main thread, so total program time barely changes until the thread overhead becomes large at 512 and 1024.
+**Machine 1:** MacBook Pro (Mac17,2), Apple M5, 10 cores (4 Super + 6 Efficiency), 16 GB RAM, macOS (Darwin 25.6.0). Compiled with the Makefile: `g++ -std=c++11 -Wall -Wextra -pthread -O2`. 5 runs per configuration, median reported.
+
+| Workers | Elapsed time |
+|---------|--------------|
+| 1       | 0.003 s      |
+| 2       | 0.001 s      |
+| 4       | 0.001 s      |
+| 8       | 0.001 s      |
+| 16      | 0.001 s      |
+| 32      | 0.002 s      |
+| 64      | 0.002 s      |
+| 128     | 0.003 s      |
+| 256     | 0.004 s      |
+| 512     | 0.008 s      |
+| 1024    | 0.016 s      |
+
+Time drops from 1 to 2 workers, then flattens through 16. It gets worse from 32 workers on, doubling at each step from 128 to 1024. The analysis is only a few milliseconds, so thread startup and queue-lock contention are a large share of it. With 10 cores, extra threads cannot run in parallel and only add creation, scheduling and join cost. The whole-process time, which includes the ~47 ms file parse on the main thread, stayed at about 0.05 s for 1 to 64 workers and rose to 0.066 s at 1024.
 
 ### Linux server results (earth.ecs.baylor.edu)
 
-**Machine 2:** Baylor ECS shared Linux server `earth`, compiled with `g++ -std=c++17 -Wall -pthread`. Same input (`signals.txt`), one run per configuration. Output was identical for every run: 500 segments, 4,165,467 samples, 345 signals detected. CPU: Intel Xeon Gold 6230 @ 2.10 GHz, 80 logical CPUs (shared with other users).
+**Machine 2:** Baylor ECS shared Linux server `earth`, Intel Xeon Gold 6230 @ 2.10 GHz, 80 logical CPUs (shared with other users). Compiled with `g++ -std=c++17 -Wall -pthread` (no `-O`). One run per configuration.
 
 | Workers | Elapsed time |
 |---------|--------------|
@@ -98,6 +101,6 @@ Analysis time drops from 1 to 2 workers, then flattens from 2 to 16 workers. It 
 | 116     | 0.009 s (highest count that ran) |
 | 128     | crashed (`std::system_error: Resource temporarily unavailable`) |
 
-On Linux the analysis scales with workers from 1 to 16 (0.024 s to 0.004 s, about 6x), then gets slightly worse at 32 and 64 as thread overhead outweighs the gains. The Mac is much faster at 1 worker (0.003 s vs 0.024 s), so it has little room left to gain from parallelism. Linux has more room, so the speedup is visible.
+On Linux the time scales with workers from 1 to 16 (0.024 s to 0.004 s, about 6x), then gets slightly worse at 32 and 64 as thread overhead outweighs the gains. The Mac is faster at every worker count and much faster at 1 worker (0.003 s vs 0.024 s), so it has little room left to gain from parallelism, while earth's slower baseline leaves more for threads to recover. Part of the gap may be the missing `-O` flag on earth, which has not been re-tested.
 
-At 128 workers the program aborted because `earth` refused to create more threads. This is the per-user process/thread limit on the shared server: `ulimit -u` reports 128, and on Linux each thread counts toward that limit. Counting down from 128, 116 workers was the most that ran, which leaves about 12 slots for the main thread, the monitor thread, the shell and other processes. The 128 workers plus the main thread, the monitor thread, and the login shell and other processes already running exceed it. The program does not catch the exception from `std::thread`. macOS handled up to 1024 workers.
+At 128 workers the program aborted because `earth` refused to create more threads. `ulimit -u` reports 128 on earth, and each thread counts toward that per-user limit. Counting down from 128, 116 workers was the most that ran, which leaves about 12 slots for the main thread, the monitor thread, the shell and other processes. The program does not catch the exception from `std::thread`. macOS handled up to 1024 workers.
