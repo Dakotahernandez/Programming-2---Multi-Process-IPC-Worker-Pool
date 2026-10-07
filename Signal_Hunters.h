@@ -1,7 +1,15 @@
 #ifndef Signal_Hunters_H
 #define Signal_Hunters_H
 
+#include <atomic>
+#include <condition_variable>
+#include <functional>
 #include <iostream>
+#include <mutex>
+#include <queue>
+#include <string>
+#include <thread>
+#include <vector>
 
 using namespace std;
 
@@ -41,11 +49,12 @@ Elapsed time:       0.032 seconds
 
 struct Segment{
     vector<int> signals;
-    string segment_id = NULL;
+    string segment_id;
+    int detection_threshold = 0;
     int numner_of_signals = 0;
     int min_signal_strength = 0;
     int max_signal_strength = 0;
-    double average_signal_strength;
+    double average_signal_strength = 0.0;
     int number_of_signal_above_detection_threshold = 0;
     int longest_consecutive_run_above_detection_threshold = 0;
 
@@ -54,20 +63,9 @@ struct Segment{
      classification scheme might use:
     NO SIGNAL.      0
     POSSIBLE SIGNAL 1
-    STRONG SIGNAL   3
+    STRONG SIGNAL   2
     */
     int classification = 0;
-    
-    /*
-      Emergency-response supervisors want to observe the system 
-      while it is running. Each worker must therefore publish 
-      several pieces of status information that can safely be 
-      examined while the worker is processing data.
-     */
-    int number_of_segments_processed = 0;
-    int number_of_samples_examined = 0;
-    int number_of_signals_detected = 0;
-    bool is_worker_busy = false;
 };
 
 /*
@@ -88,7 +86,6 @@ Jobs remaining:   127
 
 
 */
-void print_monitoring_status(Segment segment, ostream& pout);
 
 
 /*
@@ -126,6 +123,80 @@ Worker threads:             4
 Elapsed time:           2.84 seconds
 */
 
+
+
+void parse_segment(const string& line, Segment& segment);
+void analyze_segment(Segment& segment);
+string format_segment_result(const Segment& segment);
+const char* classification_name(int classification);
+
+
+struct WorkerStatus {
+    atomic<int> segments_processed;
+    atomic<int> samples_examined;
+    atomic<int> signals_detected;
+    atomic<bool> is_busy;
+
+    WorkerStatus() : segments_processed(0), samples_examined(0),
+                     signals_detected(0), is_busy(false) {
+    }
+};
+
+
+class ThreadPool {
+public:
+    typedef function<void()> Job;
+
+    ThreadPool(int number_of_workers);
+    ~ThreadPool();
+
+    void submit(Job job);
+    void shutdown();
+
+    int size() const;
+    int jobs_remaining() const;
+
+    const WorkerStatus& status(int worker) const;
+
+    static WorkerStatus* current_worker_status();
+
+private:
+    void worker_loop(int worker_id);
+
+    vector<WorkerStatus> statuses;
+    vector<thread> workers;
+
+    queue<Job> job_queue;
+    bool stopping = false;
+    mutex queue_mutex;
+    condition_variable job_available;
+
+    atomic<int> jobs_pending;
+};
+
+
+class Monitor {
+public:
+    Monitor(const ThreadPool& pool, ostream& out);
+    ~Monitor();
+
+    void start();
+    void stop();
+
+private:
+    void run();
+    void print_status();
+
+    const ThreadPool& pool;
+    ostream& pout;
+    thread monitor_thread;
+    bool stop_requested = false;
+    mutex monitor_mutex;
+    condition_variable stop_signal;
+};
+
+
+void print_summary(const ThreadPool& pool, double elapsed_seconds, ostream& pout);
 
 
 #endif 

@@ -1,14 +1,10 @@
 #include <iostream>
-#include <array>
-#include <thread>
-#include <mutex>
-#include <condition_variable>
-#include <stdexcept>
+#include <chrono>
+#include <cstdlib>
 #include <string>
 #include <vector>
 #include <fstream>
-#include <queue>
-#include <sstream>
+#include <mutex>
 
 #include "Signal_Hunters.h"
 
@@ -16,48 +12,66 @@ using namespace std;
 
 
 
-int main(int argc, char *argv[]) {//example call ./signalHunter signals.txt 4
-
+int main(int, char *argv[]) {//example call ./signalHunter signals.txt 4
 
     string filename = argv[1];
-    string line;
+    int number_of_threads = atoi(argv[2]);
 
-    istringstream iss(line);
-    string signal_id;
-    int value;
-
-    int number_of_threads = stoi(argv[2]);
     ifstream fin(filename);
+    vector<string> lines;
+    string line;
+    /*
+    example line S001 70 12 15 17 74 82 91 78 20 18 14 11
+    */
+    while (getline(fin, line)) {
+        lines.push_back(line);
+    }
+    fin.close();
 
-    vector<int> signals;
-    queue<Segment> job_queue;
-    vector<thread> workers;
+    // main thread parses the file into segments
+    vector<Segment> segments(lines.size());
+    for (size_t i = 0; i < lines.size(); ++i) {
+        parse_segment(lines[i], segments[i]);
+    }
 
+    vector<string> results;
+    results.reserve(lines.size());
+    mutex results_mutex;
 
-    if (fin.is_open()) {
-        /*
-        example line S001 70 12 15 17 74 82 91 78 20 18 14 11
-        */
-        while (getline(fin, line)) {
-            
-            iss >> signal_id;
-            while (iss >> value) {
-                signals.push_back(value);
+    chrono::steady_clock::time_point start = chrono::steady_clock::now();
+
+    ThreadPool pool(number_of_threads);
+    Monitor monitor(pool, cout);
+    monitor.start();
+
+    for (size_t i = 0; i < segments.size(); ++i) {
+        pool.submit([&segments, &results, &results_mutex, i]() {
+            Segment& segment = segments[i];
+            analyze_segment(segment);
+
+            WorkerStatus* status = ThreadPool::current_worker_status();
+            status->segments_processed.fetch_add(1);
+            status->samples_examined.fetch_add(segment.numner_of_signals);
+            if (segment.classification != 0) {
+                status->signals_detected.fetch_add(1);
             }
-            Segment segment;
-            segment.signals = signals;
-            segment.segment_id = signal_id;
-            segment.numner_of_signals = signals.size();
-            job_queue.push(segment);
-            signals.clear();
-        }
-    }
-    else {
-        cout << "Error opening file: " << filename << endl;
+
+            string result = format_segment_result(segment);
+            lock_guard<mutex> lock(results_mutex);
+            results.push_back(result);
+        });
     }
 
+    pool.shutdown();
+    chrono::steady_clock::time_point finish = chrono::steady_clock::now();
+    monitor.stop();
 
+    for (size_t i = 0; i < results.size(); ++i) {
+        cout << results[i] << '\n';
+    }
+
+    double elapsed = chrono::duration<double>(finish - start).count();
+    print_summary(pool, elapsed, cout);
 
     return 0;
 }
-
