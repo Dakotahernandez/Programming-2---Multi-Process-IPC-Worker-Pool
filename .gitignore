@@ -1,0 +1,5 @@
+.vscode
+*.dSYM
+Signal_Hunters_Driver
+signalHunter
+.DS_Store

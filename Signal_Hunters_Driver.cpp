@@ -10,6 +10,33 @@
 
 using namespace std;
 
+// One job: analyze a single segment, update this worker's counters, store the result.
+struct AnalyzeJob {
+    Segment* segment;
+    vector<string>* results;
+    mutex* results_mutex;
+
+    AnalyzeJob(Segment* segment, vector<string>* results, mutex* results_mutex)
+        : segment(segment), results(results), results_mutex(results_mutex) {
+    }
+
+    void operator()() {
+        analyze_segment(*segment);
+
+        WorkerStatus* status = ThreadPool::current_worker_status();
+        status->segments_processed.fetch_add(1);
+        status->samples_examined.fetch_add(segment->numner_of_signals);
+        if (segment->classification != 0) {
+            status->signals_detected.fetch_add(1);
+        }
+
+        string result = format_segment_result(*segment);
+        lock_guard<mutex> lock(*results_mutex);
+        results->push_back(result);
+    }
+};
+
+
 
 
 int main(int, char *argv[]) {//example call ./signalHunter signals.txt 4
@@ -45,21 +72,7 @@ int main(int, char *argv[]) {//example call ./signalHunter signals.txt 4
     monitor.start();
 
     for (size_t i = 0; i < segments.size(); ++i) {
-        pool.submit([&segments, &results, &results_mutex, i]() {
-            Segment& segment = segments[i];
-            analyze_segment(segment);
-
-            WorkerStatus* status = ThreadPool::current_worker_status();
-            status->segments_processed.fetch_add(1);
-            status->samples_examined.fetch_add(segment.numner_of_signals);
-            if (segment.classification != 0) {
-                status->signals_detected.fetch_add(1);
-            }
-
-            string result = format_segment_result(segment);
-            lock_guard<mutex> lock(results_mutex);
-            results.push_back(result);
-        });
+        pool.submit(AnalyzeJob(&segments[i], &results, &results_mutex));
     }
 
     pool.shutdown();

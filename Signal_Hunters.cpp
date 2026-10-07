@@ -169,9 +169,9 @@ void ThreadPool::worker_loop(int worker_id) {
         Job job;
         {
             unique_lock<mutex> lock(queue_mutex);
-            job_available.wait(lock, [this] {
-                return stopping || !job_queue.empty();
-            });
+            while (!stopping && job_queue.empty()) {
+                job_available.wait(lock);
+            }
             if (job_queue.empty()) {
                 return;
             }
@@ -211,12 +211,13 @@ void Monitor::stop() {
 
 void Monitor::run() {
     unique_lock<mutex> lock(monitor_mutex);
-    while (!stop_signal.wait_for(lock, chrono::seconds(1), [this] {
-        return stop_requested;
-    })) {
-        lock.unlock();
-        print_status();
-        lock.lock();
+    while (!stop_requested) {
+        cv_status status = stop_signal.wait_for(lock, chrono::seconds(1));
+        if (status == cv_status::timeout && !stop_requested) {
+            lock.unlock();
+            print_status();
+            lock.lock();
+        }
     }
     lock.unlock();
     print_status();
