@@ -1,3 +1,12 @@
+/*
+Table or Booth
+Owen Chipman
+Jonah Beck
+Dakota Hernandez
+Jack Fontenot
+Chase Caldwell
+*/
+
 #include "Signal_Hunters.h"
 
 #include <chrono>
@@ -257,7 +266,9 @@ void Monitor::print_status() {
 }
 
 
-void print_summary(const ThreadPool& pool, double elapsed_seconds, ostream& pout) {
+void print_summary(
+    const ThreadPool& pool, double elapsed_seconds, ostream& pout
+) {
     int segments = 0;
     int samples = 0;
     int signals = 0;
@@ -292,7 +303,6 @@ void AnalyzeJob::operator()() {
     if (segment->classification != 0) {
         status->signals_detected.fetch_add(1);
     }
-
     string result = format_segment_result(*segment);
     lock_guard<mutex> lock(*results_mutex);
     results->push_back(result);

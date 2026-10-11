@@ -1,3 +1,12 @@
+/*
+Table or Booth
+Owen Chipman
+Jonah Beck
+Dakota Hernandez
+Jack Fontenot
+Chase Caldwell
+*/
+
 #include <iostream>
 #include <chrono>
 #include <cstdlib>

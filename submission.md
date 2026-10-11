@@ -63,7 +63,7 @@ Workers block on `job_available.wait()` until the queue is not empty or `stoppin
 
 ## Performance Experiment
 
-Input: `signals.txt` (500 segments, 4,165,467 samples). Output was identical for every run on both machines: 500 segments, 4,165,467 samples, 345 signals detected. The reported time is the "Elapsed time" printed by the program, which covers creating the pool through `shutdown()` and excludes file parsing.
+Input: `signals.txt` (500 segments, 4,165,467 samples). Output was identical for every run on both machines: 500 segments, 4,165,467 samples, 345 signals detected. 
 
 ### Local results (MacBook Pro)
 
@@ -71,19 +71,19 @@ Input: `signals.txt` (500 segments, 4,165,467 samples). Output was identical for
 
 | Workers | Elapsed time |
 |---------|--------------|
-| 1       | 0.003 s      |
-| 2       | 0.001 s      |
-| 4       | 0.001 s      |
-| 8       | 0.001 s      |
-| 16      | 0.001 s      |
-| 32      | 0.002 s      |
-| 64      | 0.002 s      |
-| 128     | 0.003 s      |
-| 256     | 0.004 s      |
-| 512     | 0.008 s      |
-| 1024    | 0.016 s      |
+| 1       | 0.002581 s      |
+| 2       | 0.001441 s      |
+| 4       | 0.001004 s      |
+| 8       | 0.000840 s      |
+| 16      | 0.000838 s      |
+| 32      | 0.001567 s      |
+| 64      | 0.002229 s      |
+| 128     | 0.002923 s      |
+| 256     | 0.004437 s      |
+| 512     | 0.007943 s      |
+| 1024    | 0.015849 s      |
 
-Time drops from 1 to 2 workers, then flattens through 16. It gets worse from 32 workers on, doubling at each step from 128 to 1024.
+ Time drops from 0.00258 s at 1 worker to about 0.00084 s at 8 and 16 workers , then flatens. It gets worse from 32 workers on as thread overhead dominates, roughly doubling at each step from 128 to 1024.
 
 ### Linux server results (earth.ecs.baylor.edu)
 
@@ -98,7 +98,7 @@ Time drops from 1 to 2 workers, then flattens through 16. It gets worse from 32 
 | 16      | 0.004 s      |
 | 32      | 0.006 s      |
 | 64      | 0.006 s      |
-| 116     | 0.009 s (highest count that ran) |
+| 116     | 0.009 s (highest count that i could ran) |
 | 128     | crashed (`std::system_error: Resource temporarily unavailable`) |
 
-On Linux the time scales with workers from 1 to 16 (0.024 s to 0.004 s, about 6x), then gets slightly worse at 32 and 64 as thread overhead outweighs the gains.
+On Linux the time scales with workers from 1 to 16 (0.024 s to 0.004 s aboout 6x , then gets slightly worse at 32 and 64 as thread overhead outweighs the gains.

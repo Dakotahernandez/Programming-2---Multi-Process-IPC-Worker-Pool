@@ -1,3 +1,13 @@
+/*
+Table or Booth
+Owen Chipman
+Jonah Beck
+Dakota Hernandez
+Jack Fontenot
+Chase Caldwell
+*/
+
+
 #ifndef Signal_Hunters_H
 #define Signal_Hunters_H
 
