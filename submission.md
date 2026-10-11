@@ -1,20 +1,19 @@
+Owen Chipman  
+Jonah Beck  
+Dakota Hernandez  
+Jack Fontenot  
+Chase Caldwell
+
 # Signal Hunters – Submission
 
 ![Diagram](IMG_2371.png)
-
-## Compilation
-
-```bash
-g++ -std=c++11 -Wall -Wextra -pthread Signal_Hunters.cpp
- Signal_Hunters_Driver.cpp -o signalHunter
-```
 
 ## Architecture
 
 - **Main thread:** parses the file into `Segment`s, submits one job per segment, calls `shutdown()`, prints results and summary.
 - **ThreadPool:** N worker threads, a job queue, a mutex and a condition variable.
 - **Monitor:** separate thread that prints worker status about once per second.
-- **Job:** an `AnalyzeJob` function object that analyzes one segment, updates the worker's counters, and appends the  result to the results vector.
+- **Job:** analyzes one segment, updates the worker's counters, and appends the result to the results vector.
 
 ## Job Distribution
 
